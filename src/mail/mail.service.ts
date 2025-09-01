@@ -5,7 +5,7 @@ import { Model } from 'mongoose';
 import { Task, TaskDocument } from 'src/task/schema/task.schema';
 import { User, UserDocument } from 'src/users/schemas/user.schema';
 import * as nodemailer from 'nodemailer';
-import { log } from 'console';
+import path from 'path';
 
 @Injectable()
 export class MailService {
@@ -40,29 +40,30 @@ export class MailService {
     }
   }
   //2.get summary(task, user, email)
-  @Cron(CronExpression.EVERY_DAY_AT_6PM)
-  async sendSummary(){
-    const today = Date.now();
-    const start = new Date(today)
-    start.setHours(0,0,0,0)
-    const end = new Date();
-    end.setHours(23,59,59,999)
-    //task
-    const tasks = await this.taskModel.find({
-      deadline: {$gte: start, $lte: end}
-    }).populate<{ user: UserDocument }>('user');
+  @Cron('30 12 * * 1-6')
+  async sendSummary(email: string){
+    const now = new Date();
+    const IST_OFFSET = 5.5 * 60;
+    const toIST = (date: Date) => {
+      const utc = date.getTime() + date.getTimezoneOffset() * 6000;
+      return new Date(utc + IST_OFFSET * 6000)
+    }
+    const startIST = toIST(new Date(now));
+    startIST.setHours(0,0,0,0)
+    const endIST = toIST(new Date());
+    endIST.setHours(23,59,59,999)
     //user
-    const getUser = new Map<string, TaskDocument[]>();
-    for(const task of tasks){
-      const user = task.user as any;
-      const userId = user._id.toString();
-      if(!getUser.has(userId)) getUser.set(userId, [])
-        getUser.get(userId)!.push(task as unknown as TaskDocument & {user: UserDocument})
+    const user = await this.userModel.findOne({ email }).populate<{tasks: TaskDocument[]}>({
+      path: 'tasks',
+      match: {deadline: { $gte: startIST, $lte: endIST} }
+    })
+    if(!user) {
+      this.logger.log(`not task asigned ${user}`)
+      return;
     }
     //summary
-    for (const tasks of getUser.values()) {
-      const user = tasks[0].user as unknown as UserDocument;
-      const taskList = tasks.map(t => `${t.title}${t.status}`)
+      const taskList = user.tasks
+      .map(t => `${t.title}${t.status}`)
       await this.sendMail(
         user.email,
         `Your Task Summary for Today`,
@@ -70,10 +71,7 @@ export class MailService {
       )
       this.logger.log(`summary sent ${user.email}`)
     }
-
-  }
-
-  private async sendMail(to: string, subject: string, text: string){
+    async sendMail(to: string, subject: string, text: string){
     const transporter = nodemailer.createTransport({
       service: 'gmail',
       port: 587,
@@ -91,4 +89,7 @@ export class MailService {
     });
     console.log('message sent', info.messageId);
   }
-}
+
+  }
+
+

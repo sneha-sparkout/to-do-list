@@ -40,11 +40,11 @@ export class TaskService {
   }
   async viewTask(userId: string): Promise<TaskDocument[]>{
     const now = new Date();
-  const startDay = new Date();
-  startDay.setHours(0, 0, 0, 0);
+    const startDay = new Date();
+    startDay.setHours(0, 0, 0, 0);
 
-  const endDay = new Date();
-  endDay.setHours(23, 59, 59, 999);
+    const endDay = new Date();
+    endDay.setHours(23, 59, 59, 999);
 
     return await this.taskModel.find({
       user: userId,

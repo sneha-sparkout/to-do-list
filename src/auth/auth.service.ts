@@ -4,8 +4,6 @@ import { Model } from 'mongoose';
 import { User, UserDocument } from 'src/users/schemas/user.schema';
 import * as bcrypt from 'bcrypt'
 import { CreateUserDto } from 'src/users/dto/create-user.dto';
-import { NotFoundError } from 'rxjs';
-import { error } from 'console';
 import { JwtService } from '@nestjs/jwt';
 
 @Injectable()
@@ -27,7 +25,7 @@ export class AuthService {
   }
 
   async login(email: string, password: string){
-    const user = await this.userModel.findOne({ email })
+    const user = await this.userModel.findOne({ email }).select('-password')
     if(!user) throw new NotFoundException('user not found');
     const isMatch = await bcrypt.compare(password, user.password)
     if(!isMatch) throw new UnauthorizedException('Invalid Credential')

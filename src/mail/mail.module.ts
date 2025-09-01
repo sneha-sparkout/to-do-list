@@ -13,5 +13,6 @@ import { Task, TaskSchema } from 'src/task/schema/task.schema';
   ])],
   controllers: [MailController],
   providers: [MailService],
+  exports: [MailService]
 })
 export class MailModule {}

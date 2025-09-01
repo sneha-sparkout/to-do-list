@@ -38,4 +38,12 @@ export class AdminController {
   userBlockStatus(@Param('id') id: string, @Body() body: { isBlocked: boolean }){
     return this.adminService.blockUnblockUser(id, body.isBlocked)
   }
+
+  @Roles('admin')
+  @UseGuards(JwtAuthGuard)
+  @Get('send-summary')
+  async sendSummary(){
+    await this.adminService.adminSummary()
+  }
+  
 }

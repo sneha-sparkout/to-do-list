@@ -10,6 +10,11 @@ export class MailController {
     async sendReminder (){
       return this.mailService.createReminder();
     }
+    
+    @Post('send-summary')
+    async sendSummary(@Body('email') email: string) {
+    return this.mailService.sendSummary(email);
+    }
   }
 
 

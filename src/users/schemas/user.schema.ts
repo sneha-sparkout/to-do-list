@@ -1,5 +1,8 @@
 import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
+import { Types } from "mongoose";
 import { UserRole } from "src/common/roles.enum";
+import { TaskDocument } from "src/task/schema/task.schema";
+import { types } from "util";
 
 export type UserDocument = User & Document
 
@@ -24,6 +27,10 @@ export class User {
 
     @Prop({ default: false })
     isBlocked?: boolean
+
+    @Prop({ type: Types.ObjectId, ref: 'tasks' })
+    tasks: Types.ObjectId[];
+
 
 }
 export const UserSchema = SchemaFactory.createForClass(User)
