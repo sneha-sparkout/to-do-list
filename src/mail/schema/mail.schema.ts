@@ -10,7 +10,7 @@ export class Mail{
     user: Types.ObjectId
 
     @Prop({ ref: 'task', type: Types.ObjectId})
-    task: Types.ObjectId
+    tasks: Types.ObjectId
 
     @Prop({ type: Date })
     reminderTime?: Date

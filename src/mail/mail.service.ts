@@ -1,11 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { Cron } from '@nestjs/schedule';
 import { InjectModel } from '@nestjs/mongoose';
-import { Cron, CronExpression } from '@nestjs/schedule';
 import { Model } from 'mongoose';
 import { Task, TaskDocument } from 'src/task/schema/task.schema';
 import { User, UserDocument } from 'src/users/schemas/user.schema';
 import * as nodemailer from 'nodemailer';
-import path from 'path';
 
 @Injectable()
 export class MailService {
@@ -15,81 +14,65 @@ export class MailService {
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
     @InjectModel(Task.name) private readonly taskModel: Model<TaskDocument>,
   ) {}
-  //1.sending reminder
-  @Cron(CronExpression.EVERY_5_MINUTES)
-  async createReminder(){
-    console.log('Now:', new Date());
-    const now = Date.now();
-    const setReminder = new Date(now + 60 * 60 * 1000)
-    const tasks = await this.taskModel.find({
-      deadline: {$gte:now, $lte: setReminder},
-      reminderSent: { $ne: true },
-    }).populate<{ user: UserDocument }>('user');
-    console.log('Tasks found:', tasks.length);
-    for(const task of tasks){
-      if(!task.deadline) continue;
-      this.logger.log(`sending email ${task.user.email} for ${task.title}`)
-      console.log('Sending email to:', task.user.email);
-      await this.sendMail(
-        task.user.email,
-        `REMINDER FOR ${task.title} BEFORE ${task.deadline}`,
-        `Hi this is a reminder to complete your task before deadline`
-      );
-      task.reminderSent = true;
-      await task.save()
-    }
+
+  private toIST(date: Date) {
+    const utc = date.getTime() + date.getTimezoneOffset() * 60000;
+    return new Date(utc + 5.5 * 60 * 60000);
   }
-  //2.get summary(task, user, email)
-  @Cron('30 12 * * 1-6')
-  async sendSummary(email: string){
-    const now = new Date();
-    const IST_OFFSET = 5.5 * 60;
-    const toIST = (date: Date) => {
-      const utc = date.getTime() + date.getTimezoneOffset() * 6000;
-      return new Date(utc + IST_OFFSET * 6000)
-    }
-    const startIST = toIST(new Date(now));
-    startIST.setHours(0,0,0,0)
-    const endIST = toIST(new Date());
-    endIST.setHours(23,59,59,999)
-    //user
-    const user = await this.userModel.findOne({ email }).populate<{tasks: TaskDocument[]}>({
-      path: 'tasks',
-      match: {deadline: { $gte: startIST, $lte: endIST} }
-    })
-    if(!user) {
-      this.logger.log(`not task asigned ${user}`)
-      return;
-    }
-    //summary
-      const taskList = user.tasks
-      .map(t => `${t.title}${t.status}`)
-      await this.sendMail(
-        user.email,
-        `Your Task Summary for Today`,
-        `Here is your todays task ${taskList}`
-      )
-      this.logger.log(`summary sent ${user.email}`)
-    }
-    async sendMail(to: string, subject: string, text: string){
+
+  private async sendMail(to: string, subject: string, text: string) {
     const transporter = nodemailer.createTransport({
       service: 'gmail',
-      port: 587,
-      secure: false,
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASSWORD,
-      }
-    })
-    const info = await transporter.sendMail({
-      from: process.env.EMAIL_USER,
-      to,
-      subject,
-      text
+      auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASSWORD },
     });
-    console.log('message sent', info.messageId);
+
+    const info = await transporter.sendMail({ from: process.env.EMAIL_USER, to, subject, text });
+    this.logger.log(`email ${to}: ${info.messageId}`);
   }
 
+  @Cron('0 19 * * 6')
+  async sendWeeklySummary() {
+    try {
+      const users = await this.userModel.find();
+      if (!users.length) {
+        this.logger.warn('user not found');
+        return;
+      }
+      const admins = await this.userModel.find({ role: 'admin' });
+
+      for (const user of users) {
+        if (!user.email) continue;
+
+        const tasks = await this.taskModel.find({ user: user._id });
+        const taskList = (tasks || [])
+          .map((t, i) => {
+          const deadline = this.toIST(new Date(t.deadline!)).toLocaleString('en-IN');
+            return `${i + 1}. ${t.title || 'No title'} - Status: ${t.status || 'Pending'} - Deadline: ${deadline}`;
+          })
+        await this.sendMail(user.email, 'Your Weekly Task Summary', `Helo ${user.email}Your tasks${taskList}`);
+        this.logger.log(`Summary sent to user: ${user.email}`);
+      }
+
+      let adminSummary = '';
+      for (const user of users) {
+        const tasks = await this.taskModel.find({ user: user._id });
+        const taskList = (tasks || [])
+          .map((t, i) => {
+            const deadline = t.deadline ? this.toIST(new Date(t.deadline)).toLocaleString('en-IN') : 'No deadline';
+            return `${i + 1}. ${t.title } - Status: ${t.status } - Deadline: ${deadline}`;
+          })
+        adminSummary += `User: ${user.email}${taskList}`;
+      }
+
+      for (const admin of admins) {
+        if (!admin.email) continue;
+        await this.sendMail(admin.email, 'all user weekly summary', adminSummary);
+        this.logger.log(`summary sent to admin: ${admin.email}`);
+      }
+
+      this.logger.log('mail sent successfully.');
+    } catch (err) {
+      this.logger.error('error sending summaries:', err);
+    }
   }
-
-
+}

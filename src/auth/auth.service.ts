@@ -25,7 +25,7 @@ export class AuthService {
   }
 
   async login(email: string, password: string){
-    const user = await this.userModel.findOne({ email }).select('-password')
+    const user = await this.userModel.findOne({ email })
     if(!user) throw new NotFoundException('user not found');
     const isMatch = await bcrypt.compare(password, user.password)
     if(!isMatch) throw new UnauthorizedException('Invalid Credential')
