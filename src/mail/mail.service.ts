@@ -41,13 +41,11 @@ export class MailService {
       const admins = await this.userModel.find({ role: 'admin' });
 
       for (const user of users) {
-        if (!user.email) continue;
-
         const tasks = await this.taskModel.find({ user: user._id });
         const taskList = (tasks || [])
           .map((t, i) => {
           const deadline = this.toIST(new Date(t.deadline!)).toLocaleString('en-IN');
-            return `${i + 1}. ${t.title || 'No title'} - Status: ${t.status || 'Pending'} - Deadline: ${deadline}`;
+            return `${i + 1}. ${t.title } - Status: ${t.status} - Deadline: ${deadline}`;
           })
         await this.sendMail(user.email, 'Your Weekly Task Summary', `Helo ${user.email}Your tasks${taskList}`);
         this.logger.log(`Summary sent to user: ${user.email}`);
@@ -65,7 +63,6 @@ export class MailService {
       }
 
       for (const admin of admins) {
-        if (!admin.email) continue;
         await this.sendMail(admin.email, 'all user weekly summary', adminSummary);
         this.logger.log(`summary sent to admin: ${admin.email}`);
       }
